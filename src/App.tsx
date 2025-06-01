@@ -1,25 +1,29 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from '@mui/material/styles';
+import { Box } from '@mui/material';
+import CssBaseline from '@mui/material/CssBaseline';
+import { theme } from './utils/theme';
+import { Navbar } from './components/Navbar';
+import { UploadPage } from './pages/UploadPage';
+import { InsightsPage } from './pages/InsightsPage';
+import { AlertsPage } from './pages/AlertsPage';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <BrowserRouter>
+        <Box className="App">
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<Navigate to="/upload" replace />} />
+            <Route path="/upload" element={<UploadPage />} />
+            <Route path="/insights" element={<InsightsPage />} />
+            <Route path="/alerts" element={<AlertsPage />} />
+          </Routes>
+        </Box>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
 
