@@ -9,8 +9,8 @@ export const Navbar = () => {
           SmartLogi
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button color="inherit" component={RouterLink} to="/upload">
-            Upload
+          <Button color="inherit" component={RouterLink} to="/invoices">
+            Invoices
           </Button>
           <Button color="inherit" component={RouterLink} to="/insights">
             Insights

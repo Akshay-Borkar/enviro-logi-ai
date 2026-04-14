@@ -7,6 +7,8 @@ import { Navbar } from './components/Navbar';
 import { UploadPage } from './pages/UploadPage';
 import { InsightsPage } from './pages/InsightsPage';
 import { AlertsPage } from './pages/AlertsPage';
+import { InvoicePage } from './pages/InvoicePage';
+import { ChatMenu } from './components/ChatMenu';
 
 function App() {
   return (
@@ -16,11 +18,13 @@ function App() {
         <Box className="App">
           <Navbar />
           <Routes>
-            <Route path="/" element={<Navigate to="/upload" replace />} />
+            <Route path="/" element={<Navigate to="/invoices" replace />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/insights" element={<InsightsPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
+            <Route path="/invoices" element={<InvoicePage />} />
           </Routes>
+          <ChatMenu />
         </Box>
       </BrowserRouter>
     </ThemeProvider>

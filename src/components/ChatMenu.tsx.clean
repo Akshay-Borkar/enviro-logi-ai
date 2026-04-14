@@ -1,0 +1,411 @@
+/* eslint-disable prettier/prettier */
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Box,
+  Paper,
+  TextField,
+  Typography,
+  IconButton,
+  Divider,
+  Alert,
+  Menu,
+  MenuItem,
+  Tooltip,
+} from '@mui/material';
+import { Send, DeleteOutline, MoreVert, Refresh } from '@mui/icons-material';
+import { v4 as uuidv4 } from 'uuid';
+import { ChatButton } from './ChatButton';
+import { MessageBubble } from './MessageBubble';
+import { TypingIndicator } from './TypingIndicator';
+import { chatApi, ChatMessage } from '../services/chatService';
+
+export const ChatMenu: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [sessionId, setSessionId] = useState<string>('');
+  const [menuWidth, setMenuWidth] = useState<number>(320);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Load chat history and session ID when component mounts
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        if (isOpen) {
+          const history = await chatApi.getConversationHistory();
+          setMessages(history);
+          setSessionId(chatApi.getSessionId());
+        }
+      } catch (err) {
+        console.error('Failed to load chat history:', err);
+      }
+    };
+
+    loadData();
+  }, [isOpen]);
+
+  // Save chat history whenever messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      chatApi.saveConversationHistory(messages);
+    }
+  }, [messages]);
+
+  // Scroll to bottom whenever messages change
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  // Use effect to load saved menu width from localStorage
+  useEffect(() => {
+    const savedWidth = localStorage.getItem('chatMenuWidth');
+    if (savedWidth) {
+      const parsedWidth = parseInt(savedWidth, 10);
+      // Make sure the loaded width is within reasonable constraints
+      const constrainedWidth = Math.max(280, Math.min(600, parsedWidth));
+      setMenuWidth(constrainedWidth);
+    }
+  }, []);
+
+  const toggleChat = () => {
+    setIsOpen(!isOpen);
+  };
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
+
+    // Add user message to the chat
+    const userMessage: ChatMessage = {
+      id: uuidv4(),
+      content: newMessage,
+      role: 'user',
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setNewMessage('');
+    setIsTyping(true);
+    setError(null);
+
+    try {
+      // Send message to API and get response
+      const response = await chatApi.sendMessage(newMessage);
+
+      // Update session ID in case it was changed
+      setSessionId(chatApi.getSessionId());
+
+      // Add assistant response to chat
+      const assistantMessage: ChatMessage = {
+        id: response.messageId || uuidv4(),
+        content: response.message,
+        role: 'assistant',
+        timestamp: response.timestamp || new Date().toISOString(),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      setError(
+        'Unable to get a response at this time. Please try again later. If the issue persists, please contact your administrator.'
+      );
+      console.error('Chat error:', err);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  const handleClearChat = async () => {
+    try {
+      await chatApi.clearConversation();
+      setMessages([]);
+      setError(null);
+    } catch (err) {
+      setError('Failed to clear conversation. Please try again.');
+      console.error('Error clearing chat:', err);
+    }
+
+    handleMenuClose();
+  };
+
+  const handleResetSession = async () => {
+    try {
+      await chatApi.resetSession();
+      setMessages([]);
+      setError(null);
+      setSessionId(chatApi.getSessionId());
+    } catch (err) {
+      setError('Failed to reset session. Please try again.');
+      console.error('Error resetting session:', err);
+    }
+
+    handleMenuClose();
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // Handle mouse down on the resize handle
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+  };
+
+  // Handle mouse move while resizing
+  const handleResizeMove = (e: MouseEvent) => {
+    if (!isResizing) return;
+
+    // Calculate the new width based on window width minus mouse position
+    const newWidth = window.innerWidth - e.clientX;
+
+    // Enforce min and max width constraints
+    const constrainedWidth = Math.max(280, Math.min(600, newWidth));
+
+    setMenuWidth(constrainedWidth);
+  };
+
+  // Handle mouse up to end resizing
+  const handleResizeEnd = () => {
+    setIsResizing(false);
+    document.removeEventListener('mousemove', handleResizeMove);
+    document.removeEventListener('mouseup', handleResizeEnd);
+
+    // Save the menu width to localStorage for persistence
+    // Use a callback to ensure we have the latest menuWidth value
+    setMenuWidth((currentWidth) => {
+      localStorage.setItem('chatMenuWidth', currentWidth.toString());
+      return currentWidth;
+    });
+  };
+
+  // Update document cursor and prevent text selection when resizing
+  useEffect(() => {
+    if (isResizing) {
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none'; // Prevent text selection during resize
+    } else {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = ''; // Restore text selection
+    }
+  }, [isResizing]);
+
+  // Clean up event listeners when component unmounts
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('mouseup', handleResizeEnd);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <>
+      <ChatButton isOpen={isOpen} onClick={toggleChat} />
+
+      <Paper
+        ref={menuRef}
+        sx={{
+          position: 'fixed',
+          top: 0,
+          right: isOpen ? 0 : `-${menuWidth}px`,
+          width: `${menuWidth}px`,
+          height: '100%',
+          zIndex: 1300,
+          transition: isResizing ? 'none' : 'right 0.3s ease-in-out',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: 3,
+        }}
+      >
+        {/* Resize Handle - only shown when menu is open */}
+        {isOpen && (
+          <Box
+            sx={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: '8px',
+              height: '100%',
+              cursor: 'ew-resize',
+              zIndex: 1301,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              '&:hover': {
+                backgroundColor: 'rgba(0, 0, 0, 0.1)',
+              },
+              '&:active': {
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              },
+            }}
+            onMouseDown={handleResizeStart}
+          >
+            {/* Visual indicator for resize handle */}
+            <Box
+              sx={{
+                height: '30px',
+                width: '4px',
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                borderRadius: '2px',
+                position: 'absolute',
+                left: '2px',
+                opacity: 0.7,
+                transition: 'opacity 0.2s',
+                '&:hover': {
+                  opacity: 1,
+                },
+              }}
+            />
+          </Box>
+        )}
+
+        {/* Header */}
+        <Box
+          sx={{
+            p: 2,
+            backgroundColor: 'primary.main',
+            color: 'white',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <Typography variant="h6">SmartLogi AI Assistant</Typography>
+          <Box sx={{ display: 'flex' }}>
+            <Tooltip title="Options">
+              <IconButton onClick={handleMenuOpen} size="small" sx={{ color: 'white' }}>
+                <MoreVert />
+              </IconButton>
+            </Tooltip>
+
+            <Menu anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={handleMenuClose}>
+              <MenuItem onClick={handleClearChat}>
+                <DeleteOutline fontSize="small" sx={{ mr: 1 }} />
+                Clear conversation
+              </MenuItem>
+              <MenuItem onClick={handleResetSession}>
+                <Refresh fontSize="small" sx={{ mr: 1 }} />
+                Reset session
+              </MenuItem>
+            </Menu>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* Session ID indicator - useful for debugging */}
+        {sessionId && (
+          <Box
+            sx={{
+              px: 2,
+              py: 0.5,
+              bgcolor: 'grey.100',
+              fontSize: '0.7rem',
+              color: 'text.secondary',
+            }}
+          >
+            Session ID: {sessionId.substring(0, 8)}...
+          </Box>
+        )}
+
+        {/* Messages */}
+        <Box
+          sx={{
+            p: 2,
+            flexGrow: 1,
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {messages.length === 0 ? (
+            <>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ textAlign: 'center', mt: 2, mb: 1 }}
+              >
+                Ask me anything about your invoices, deliveries, or logistics data!
+              </Typography>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ textAlign: 'center', fontStyle: 'italic', display: 'block' }}
+              >
+                Powered by SmartLogi AI with n8n workflow integration
+              </Typography>
+            </>
+          ) : (
+            messages.map((message) => <MessageBubble key={message.id} message={message} />)
+          )}
+
+          {isTyping && <TypingIndicator />}
+
+          {error && (
+            <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <div ref={messagesEndRef} />
+        </Box>
+
+        <Divider />
+
+        {/* Input */}
+        <Box
+          sx={{
+            p: 2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="Type a message..."
+            size="small"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isTyping}
+            multiline
+            maxRows={3}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+              },
+            }}
+          />
+          <IconButton
+            color="primary"
+            onClick={handleSendMessage}
+            disabled={!newMessage.trim() || isTyping}
+          >
+            <Send />
+          </IconButton>
+        </Box>
+      </Paper>
+    </>
+  );
+};
